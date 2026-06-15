@@ -20,7 +20,7 @@ No MQTT broker and no cloud service are required for the default path.
 |---|---|---|
 | Direct WiFi device | One config entry per WiFi device | Root endpoint only |
 | Gateway device | One config entry per gateway | Gateway root endpoint plus child endpoints |
-
+ 
 Both architectures use the same HTTP contract:
 
 | Endpoint | Purpose |
@@ -196,6 +196,30 @@ matches the target version, the integration clears local progress state.
 
 Copy `custom_components/heiman_wifi` into Home Assistant's `custom_components`
 directory and restart Home Assistant.
+
+## Publishing Notes
+
+HACS validation also checks GitHub repository metadata. Before running the HACS
+publish action, make sure the repository has a description and topics configured
+in the GitHub About panel.
+
+Suggested description:
+
+```text
+Local Home Assistant integration for Heiman WiFi devices and gateways
+```
+
+Suggested topics:
+
+```text
+home-assistant
+hacs
+integration
+custom-component
+heiman
+wifi
+iot
+```
 
 ## Development Files
 
