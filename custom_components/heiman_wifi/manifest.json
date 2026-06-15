@@ -4,6 +4,12 @@
   "codeowners": ["@heimanwifi"],
   "config_flow": true,
   "dependencies": ["zeroconf"],
+  "dhcp": [
+    {
+      "hostname": "heiman*",
+      "macaddress": "A8C1D6*"
+    }
+  ],
   "documentation": "https://github.com/ha-china/heiman_wifi",
   "integration_type": "hub",
   "iot_class": "local_polling",
@@ -19,12 +25,6 @@
     {
       "name": "heiman*",
       "type": "_heiman._tcp.local."
-    }
-  ],
-  "dhcp": [
-    {
-      "hostname": "heiman*",
-      "macaddress": "A8C1D6*"
     }
   ]
 }
