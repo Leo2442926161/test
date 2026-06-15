@@ -10,7 +10,7 @@
   "issue_tracker": "https://github.com/ha-china/heiman_wifi/issues",
   "quality_scale": "bronze",
   "requirements": [],
-  "version": "1.2.0",
+  "version": "1.2.1",
   "zeroconf": [
     {
       "name": "heiman*",
