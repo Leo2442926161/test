@@ -1,13 +1,34 @@
 from __future__ import annotations
 
-from homeassistant.const import (
-    CONCENTRATION_PARTS_PER_MILLION,
-    PERCENTAGE,
-    SIGNAL_STRENGTH_DECIBELS_MILLIWATT,
-    UnitOfElectricPotential,
-    UnitOfEnergy,
-    UnitOfPower,
-    UnitOfTemperature,
+from homeassistant import const as ha_const
+
+PERCENTAGE = getattr(ha_const, "PERCENTAGE", "%")
+CONCENTRATION_PARTS_PER_MILLION = getattr(
+    ha_const, "CONCENTRATION_PARTS_PER_MILLION", "ppm"
+)
+SIGNAL_STRENGTH_DECIBELS_MILLIWATT = getattr(
+    ha_const, "SIGNAL_STRENGTH_DECIBELS_MILLIWATT", "dBm"
+)
+
+UNIT_CELSIUS = getattr(
+    getattr(ha_const, "UnitOfTemperature", object),
+    "CELSIUS",
+    getattr(ha_const, "TEMP_CELSIUS", "\u00b0C"),
+)
+UNIT_VOLT = getattr(
+    getattr(ha_const, "UnitOfElectricPotential", object),
+    "VOLT",
+    getattr(ha_const, "ELECTRIC_POTENTIAL_VOLT", "V"),
+)
+UNIT_WATT = getattr(
+    getattr(ha_const, "UnitOfPower", object),
+    "WATT",
+    getattr(ha_const, "POWER_WATT", "W"),
+)
+UNIT_KILO_WATT_HOUR = getattr(
+    getattr(ha_const, "UnitOfEnergy", object),
+    "KILO_WATT_HOUR",
+    getattr(ha_const, "ENERGY_KILO_WATT_HOUR", "kWh"),
 )
 
 DOMAIN = "heiman_wifi"
@@ -103,7 +124,7 @@ PLATFORMS_BY_TYPE: dict[str, list[str]] = {
 SENSOR_UNIT_MAP = {
     "temperature": {
         "device_class": "temperature",
-        "unit": UnitOfTemperature.CELSIUS,
+        "unit": UNIT_CELSIUS,
         "state_class": "measurement",
     },
     "humidity": {
@@ -118,17 +139,17 @@ SENSOR_UNIT_MAP = {
     },
     "voltage": {
         "device_class": "voltage",
-        "unit": UnitOfElectricPotential.VOLT,
+        "unit": UNIT_VOLT,
         "state_class": "measurement",
     },
     "power": {
         "device_class": "power",
-        "unit": UnitOfPower.WATT,
+        "unit": UNIT_WATT,
         "state_class": "measurement",
     },
     "energy": {
         "device_class": "energy",
-        "unit": UnitOfEnergy.KILO_WATT_HOUR,
+        "unit": UNIT_KILO_WATT_HOUR,
         "state_class": "total_increasing",
     },
     "co_concentration": {

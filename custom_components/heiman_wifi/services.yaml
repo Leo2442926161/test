@@ -40,3 +40,8 @@ call_action:
       required: true
       selector:
         text:
+    params:
+      description: Optional parameters to send with the action.
+      required: false
+      selector:
+        object:

@@ -8,12 +8,12 @@ from homeassistant.components.climate import (
     ClimateEntityFeature,
     HVACMode,
 )
-from homeassistant.const import ATTR_TEMPERATURE, UnitOfTemperature
+from homeassistant.const import ATTR_TEMPERATURE
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .const import DOMAIN
+from .const import DOMAIN, UNIT_CELSIUS
 from .coordinator import HeimanWifiCoordinator
 from .model import (
     HeimanEndpoint,
@@ -40,7 +40,7 @@ async def async_setup_entry(
 
 class HeimanWifiClimate(CoordinatorEntity[HeimanWifiCoordinator], ClimateEntity):
     _attr_has_entity_name = True
-    _attr_temperature_unit = UnitOfTemperature.CELSIUS
+    _attr_temperature_unit = UNIT_CELSIUS
     _attr_hvac_modes = [HVACMode.OFF, HVACMode.HEAT]
     _attr_supported_features = ClimateEntityFeature.TARGET_TEMPERATURE
     _attr_target_temperature_step = 1.0

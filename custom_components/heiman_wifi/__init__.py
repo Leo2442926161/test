@@ -21,9 +21,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_HOST, CONF_PORT
 from homeassistant.core import HomeAssistant, ServiceCall
 
-from .api import HeimanWifiDevice
 from .const import DOMAIN, PLATFORMS
-from .coordinator import HeimanWifiCoordinator
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -36,7 +34,7 @@ async def async_setup(hass: HomeAssistant, config: dict[str, Any]) -> bool:
 
     async def async_set_property(call: ServiceCall) -> None:
         entry_id = call.data["entry_id"]
-        coordinator: HeimanWifiCoordinator | None = hass.data[DOMAIN].get(entry_id)
+        coordinator = hass.data[DOMAIN].get(entry_id)
         if coordinator is None:
             _LOGGER.warning("No Heiman WiFi config entry found for %s", entry_id)
             return
@@ -51,7 +49,7 @@ async def async_setup(hass: HomeAssistant, config: dict[str, Any]) -> bool:
 
     async def async_call_action(call: ServiceCall) -> None:
         entry_id = call.data["entry_id"]
-        coordinator: HeimanWifiCoordinator | None = hass.data[DOMAIN].get(entry_id)
+        coordinator = hass.data[DOMAIN].get(entry_id)
         if coordinator is None:
             _LOGGER.warning("No Heiman WiFi config entry found for %s", entry_id)
             return
@@ -59,6 +57,7 @@ async def async_setup(hass: HomeAssistant, config: dict[str, Any]) -> bool:
             hass,
             call.data["action"],
             call.data.get("device_id"),
+            call.data.get("params"),
         )
         if ok:
             await coordinator.async_request_refresh()
@@ -85,6 +84,7 @@ async def async_setup(hass: HomeAssistant, config: dict[str, Any]) -> bool:
                 vol.Required("entry_id"): str,
                 vol.Optional("device_id"): str,
                 vol.Required("action"): str,
+                vol.Optional("params"): dict,
             }
         ),
     )
@@ -92,6 +92,9 @@ async def async_setup(hass: HomeAssistant, config: dict[str, Any]) -> bool:
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+    from .api import HeimanWifiDevice
+    from .coordinator import HeimanWifiCoordinator
+
     hass.data.setdefault(DOMAIN, {})
 
     host = entry.data[CONF_HOST]
@@ -111,7 +114,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    coordinator: HeimanWifiCoordinator = entry.runtime_data
+    coordinator = entry.runtime_data
 
     unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
 

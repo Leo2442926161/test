@@ -3,16 +3,14 @@
 from __future__ import annotations
 
 import logging
+from ipaddress import ip_address
 from typing import Any
 
 import voluptuous as vol
 
-from homeassistant.components.zeroconf import ZeroconfServiceInfo
 from homeassistant import config_entries
-from homeassistant.config_entries import ConfigFlowResult
 from homeassistant.const import CONF_HOST, CONF_PORT
 
-from .api import HeimanWifiDevice
 from .const import (
     CONF_ARCHITECTURE,
     CONF_DEVICE_TYPE,
@@ -22,9 +20,55 @@ from .const import (
     DEVICE_TYPES,
     DOMAIN,
 )
-from .model import info_value, normalize_identifier, normalize_mac
+from .helpers import info_value, normalize_identifier, normalize_mac
+
+ConfigFlowResult = dict[str, Any]
 
 _LOGGER = logging.getLogger(__name__)
+
+
+def _discovery_attr(discovery_info: Any, key: str) -> Any:
+    if isinstance(discovery_info, dict):
+        return discovery_info.get(key)
+    return getattr(discovery_info, key, None)
+
+
+def _discovery_host(discovery_info: Any) -> tuple[str | None, bool]:
+    raw_host = _discovery_attr(discovery_info, "ip_address")
+    if raw_host is None:
+        raw_host = _discovery_attr(discovery_info, "host")
+    if raw_host is None:
+        raw_host = _discovery_attr(discovery_info, "hostname")
+    if raw_host is None:
+        return None, False
+
+    if getattr(raw_host, "version", None) == 6:
+        return str(raw_host), True
+
+    host = str(raw_host).strip("[]")
+    try:
+        parsed = ip_address(host)
+    except ValueError:
+        return host, False
+
+    return str(parsed), parsed.version == 6
+
+
+def _discovery_port(discovery_info: Any) -> int:
+    port = _discovery_attr(discovery_info, "port")
+    if port in (None, ""):
+        return DEFAULT_PORT
+    try:
+        return int(port)
+    except (TypeError, ValueError):
+        return DEFAULT_PORT
+
+
+def _discovery_properties(discovery_info: Any) -> dict[str, Any]:
+    properties = _discovery_attr(discovery_info, "properties")
+    if isinstance(properties, dict):
+        return dict(properties)
+    return {}
 
 
 class HeimanWifiConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
@@ -41,7 +85,9 @@ class HeimanWifiConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         self._architecture: str | None = None
         self._info: dict[str, Any] | None = None
 
-    async def async_step_user(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
+    async def async_step_user(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
         if user_input is not None:
             self._host = user_input[CONF_HOST]
             self._port = user_input.get(CONF_PORT, DEFAULT_PORT)
@@ -57,23 +103,22 @@ class HeimanWifiConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             ),
         )
 
-    async def async_step_zeroconf(
-        self, discovery_info: ZeroconfServiceInfo
-    ) -> ConfigFlowResult:
-        if discovery_info.ip_address.version == 6:
+    async def async_step_zeroconf(self, discovery_info: Any) -> ConfigFlowResult:
+        host, is_ipv6 = _discovery_host(discovery_info)
+        if is_ipv6:
             return self.async_abort(reason="ipv6_not_supported")
+        if host is None:
+            return self.async_abort(reason="cannot_connect")
 
-        self._host = str(discovery_info.ip_address)
-        self._port = discovery_info.port or DEFAULT_PORT
+        self._host = host
+        self._port = _discovery_port(discovery_info)
 
-        device = HeimanWifiDevice(host=self._host, port=self._port)
-        info = await device.async_get_info(self.hass)
-        await device.close()
+        info = await self._async_get_info()
 
         if not info:
             return self.async_abort(reason="cannot_connect")
 
-        self._set_info(info, discovery_info.properties)
+        self._set_info(info, _discovery_properties(discovery_info))
         if self._mac:
             await self.async_set_unique_id(self._mac)
             self._abort_if_unique_id_configured(
@@ -104,9 +149,7 @@ class HeimanWifiConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         )
 
     async def _async_try_connect(self) -> ConfigFlowResult:
-        device = HeimanWifiDevice(host=self._host, port=self._port)
-        info = await device.async_get_info(self.hass)
-        await device.close()
+        info = await self._async_get_info()
 
         if not info:
             return self.async_show_form(
@@ -130,6 +173,27 @@ class HeimanWifiConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
         return self._async_create_entry()
 
+    async def _async_get_info(self) -> dict[str, Any]:
+        if self._host is None:
+            return {}
+
+        device = None
+        try:
+            from .api import HeimanWifiDevice
+
+            device = HeimanWifiDevice(host=self._host, port=self._port)
+            return await device.async_get_info(self.hass)
+        except Exception:
+            _LOGGER.exception(
+                "Failed to load Heiman WiFi info from %s:%s",
+                self._host,
+                self._port,
+            )
+            return {}
+        finally:
+            if device is not None:
+                await device.close()
+
     def _set_info(
         self,
         info: dict[str, Any],
@@ -145,7 +209,9 @@ class HeimanWifiConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         self._model = info_value(info, "model", "productModel") or "Unknown"
         self._device_name = info_value(info, "name", "deviceName") or "Heiman Device"
         raw_type = info_value(info, "deviceType", "type", "typeCode") or ""
-        self._device_type = DEVICE_TYPES.get(str(raw_type).upper(), str(raw_type) or "unknown")
+        self._device_type = DEVICE_TYPES.get(
+            str(raw_type).upper(), str(raw_type) or "unknown"
+        )
         self._architecture = (
             info_value(info, "architecture", "networkArchitecture", "network")
             or props.get("arch")

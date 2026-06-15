@@ -15,6 +15,7 @@ from .const import (
     MANUFACTURER,
     SENSOR_UNIT_MAP,
 )
+from .helpers import info_value, normalize_identifier, normalize_mac
 
 ROOT_STATE_KEYS = {"devices", "online", "ip", "wifi", "mqtt"}
 SCALAR_TYPES = (str, int, float, bool)
@@ -78,29 +79,6 @@ class HeimanEndpoint:
     is_root: bool
     properties: tuple[HeimanProperty, ...]
     raw: dict[str, Any] = field(default_factory=dict)
-
-
-def normalize_identifier(value: Any) -> str:
-    raw = str(value or "").strip().lower()
-    chars = [ch if ch.isalnum() else "_" for ch in raw]
-    normalized = "_".join(part for part in "".join(chars).split("_") if part)
-    return normalized or "device"
-
-
-def normalize_mac(value: Any) -> str | None:
-    raw = str(value or "").strip().lower()
-    compact = "".join(ch for ch in raw if ch.isalnum())
-    if len(compact) >= 12 and all(ch in "0123456789abcdef" for ch in compact[:12]):
-        return compact[:12]
-    return None
-
-
-def info_value(info: dict[str, Any], *keys: str) -> Any:
-    for key in keys:
-        value = info.get(key)
-        if value not in (None, ""):
-            return value
-    return None
 
 
 def root_device_id(entry: ConfigEntry, info: dict[str, Any] | None = None) -> str:

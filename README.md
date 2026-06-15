@@ -58,7 +58,7 @@ The integration reads `devices[]` from `/info` and values from `/state`.
 | `button` | Root `actions[]` or properties marked `platform: "button"` |
 | `cover` | Endpoint type contains `curtain`, `cover`, `shade`, or `blind` |
 | `climate` | Endpoint type contains `thermostat` or `climate` |
-| `update` | Root firmware version |
+| `update` | Root firmware version and optional OTA metadata |
 
 Child devices are registered as HA devices with `via_device` pointing back to
 the gateway root device.
@@ -104,7 +104,37 @@ data:
   entry_id: 01J...
   device_id: ir_01
   action: send_ir
+  params:
+    code: "..."
 ```
+
+## Firmware OTA
+
+The update entity reads the installed version from `firmwareVersion` or
+`version`. To make Home Assistant show an available OTA update, include OTA
+metadata in `/info`:
+
+```json
+{
+  "firmwareVersion": "1.0.0",
+  "ota": {
+    "latest_version": "1.0.1",
+    "url": "http://192.168.1.10/firmware.bin",
+    "action": "ota_update",
+    "release_summary": "Stability fixes"
+  },
+  "actions": ["ota_update"]
+}
+```
+
+When Install is pressed, HA calls `/control` with:
+
+```json
+{"action": "ota_update", "params": {"version": "1.0.1", "url": "http://192.168.1.10/firmware.bin"}}
+```
+
+Progress can be reported from `/state` with `ota.in_progress` and
+`ota.progress`.
 
 ## Installation
 
