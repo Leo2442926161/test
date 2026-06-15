@@ -1,0 +1,42 @@
+set_property:
+  description: Set a property on a Heiman WiFi root device or gateway child device.
+  fields:
+    entry_id:
+      description: Home Assistant config entry id for the discovered device or gateway.
+      required: true
+      selector:
+        text:
+    device_id:
+      description: Heiman endpoint id. Leave empty for direct/root devices.
+      required: false
+      selector:
+        text:
+    property:
+      description: Property id, including private property ids exposed by the device.
+      required: true
+      selector:
+        text:
+    value:
+      description: Value to send to the device.
+      required: true
+      selector:
+        object:
+
+call_action:
+  description: Call an action on a Heiman WiFi root device or gateway child device.
+  fields:
+    entry_id:
+      description: Home Assistant config entry id for the discovered device or gateway.
+      required: true
+      selector:
+        text:
+    device_id:
+      description: Heiman endpoint id. Leave empty for direct/root devices.
+      required: false
+      selector:
+        text:
+    action:
+      description: Action id, such as identify, learn_ir, send_ir, reset, or mute.
+      required: true
+      selector:
+        text:

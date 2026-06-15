@@ -1,0 +1,31 @@
+rules:
+  action-setup:
+    status: exempt
+    comment: No custom actions are defined.
+  appropriate-polling: done
+  brands: done
+  common-modules: done
+  config-flow-test-coverage:
+    status: exempt
+    comment: Tests to be added.
+  config-flow: done
+  dependency-transparency: done
+  docs-actions:
+    status: exempt
+    comment: No custom actions are defined.
+  docs-high-level-description: done
+  docs-installation-instructions: done
+  docs-removal-instations: done
+  entity-event-setup:
+    status: exempt
+    comment: No event entities.
+  entity-unique-id: done
+  has-entity-name: done
+  runtime-data: done
+  test-before-configure:
+    status: exempt
+    comment: Tests to be added.
+  test-before-setup:
+    status: exempt
+    comment: Tests to be added.
+  unique-config-entry: done

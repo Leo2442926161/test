@@ -1,0 +1,59 @@
+{
+  "config": {
+    "abort": {
+      "already_configured": "Device is already configured.",
+      "cannot_connect": "Failed to connect to the device. Please check the IP address and ensure the device is online.",
+      "ipv6_not_supported": "IPv6 is not supported for zeroconf discovery."
+    },
+    "error": {
+      "cannot_connect": "Failed to connect to the device. Please check the IP address and ensure the device is online."
+    },
+    "step": {
+      "user": {
+        "data": {
+          "host": "IP Address",
+          "port": "Port"
+        },
+        "data_description": {
+          "host": "The IP address of the Heiman WiFi device",
+          "port": "The HTTP port of the device (default: 80)"
+        },
+        "title": "Add Heiman WiFi Device"
+      },
+      "confirm": {
+        "description": "Discovered {name} ({model}) at {host}.\\n\\nDevice type: {device_type}\\n\\nDo you want to add this device?",
+        "title": "Discovered Heiman WiFi Device"
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "temperature": { "name": "Temperature" },
+      "humidity": { "name": "Humidity" },
+      "battery": { "name": "Battery" },
+      "power": { "name": "Power" },
+      "energy": { "name": "Energy" },
+      "voltage": { "name": "Voltage" }
+    },
+    "binary_sensor": {
+      "smoke": { "name": "Smoke Alarm", "state": { "off": "Clear", "on": "Alarm" } },
+      "gas": { "name": "Gas Alarm", "state": { "off": "Clear", "on": "Alarm" } },
+      "water": { "name": "Water Leak", "state": { "off": "Dry", "on": "Leak" } },
+      "motion": { "name": "Motion", "state": { "off": "Clear", "on": "Detected" } },
+      "door": { "name": "Door", "state": { "off": "Closed", "on": "Open" } }
+    },
+    "switch": {
+      "switch": { "name": "Switch" },
+      "light": { "name": "Light" }
+    },
+    "button": {
+      "reset": { "name": "Reset" },
+      "test": { "name": "Test" },
+      "locate": { "name": "Locate" },
+      "mute": { "name": "Mute" }
+    },
+    "update": {
+      "firmware": { "name": "Firmware" }
+    }
+  }
+}
