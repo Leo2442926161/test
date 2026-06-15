@@ -28,7 +28,7 @@ Both architectures use the same HTTP contract:
 | `GET /info` | Identity, model, firmware, topology, property descriptors |
 | `GET /state` | Current values for root and child devices |
 | `POST /control` | Property writes and action calls |
-
+ 
 ## Discovery
 
 The integration declares two zeroconf matchers:
@@ -209,7 +209,8 @@ Suggested description:
 Local Home Assistant integration for Heiman WiFi devices and gateways
 ```
 
-Suggested topics:
+Suggested topics. Add them one by one in the GitHub About panel; do not paste
+the code fence, commas, or labels such as `Home Assistant`.
 
 ```text
 home-assistant
