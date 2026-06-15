@@ -20,6 +20,7 @@ import voluptuous as vol
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_HOST, CONF_PORT
 from homeassistant.core import HomeAssistant, ServiceCall
+from homeassistant.exceptions import HomeAssistantError
 
 from .const import DOMAIN, PLATFORMS
 
@@ -27,6 +28,8 @@ _LOGGER = logging.getLogger(__name__)
 
 SERVICE_SET_PROPERTY = "set_property"
 SERVICE_CALL_ACTION = "call_action"
+SERVICE_INSTALL_FIRMWARE = "install_firmware"
+DEFAULT_OTA_ACTION = "ota_update"
 
 
 async def async_setup(hass: HomeAssistant, config: dict[str, Any]) -> bool:
@@ -62,6 +65,35 @@ async def async_setup(hass: HomeAssistant, config: dict[str, Any]) -> bool:
         if ok:
             await coordinator.async_request_refresh()
 
+    async def async_install_firmware(call: ServiceCall) -> None:
+        entry_id = call.data["entry_id"]
+        coordinator = hass.data[DOMAIN].get(entry_id)
+        if coordinator is None:
+            raise HomeAssistantError(
+                f"No Heiman WiFi config entry found for {entry_id}"
+            )
+
+        params = dict(call.data.get("params") or {})
+        if version := call.data.get("version"):
+            params.setdefault("version", version)
+        if url := call.data.get("url"):
+            params.setdefault("url", url)
+
+        ok = await coordinator.device.async_call_action(
+            hass,
+            call.data.get("action", DEFAULT_OTA_ACTION),
+            call.data.get("device_id"),
+            params,
+        )
+        if not ok:
+            detail = coordinator.device.last_error
+            message = f"Failed to start firmware install on {coordinator.device.host}"
+            if detail:
+                message = f"{message}: {detail}"
+            raise HomeAssistantError(message)
+
+        await coordinator.async_request_refresh()
+
     hass.services.async_register(
         DOMAIN,
         SERVICE_SET_PROPERTY,
@@ -84,6 +116,21 @@ async def async_setup(hass: HomeAssistant, config: dict[str, Any]) -> bool:
                 vol.Required("entry_id"): str,
                 vol.Optional("device_id"): str,
                 vol.Required("action"): str,
+                vol.Optional("params"): dict,
+            }
+        ),
+    )
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_INSTALL_FIRMWARE,
+        async_install_firmware,
+        schema=vol.Schema(
+            {
+                vol.Required("entry_id"): str,
+                vol.Optional("device_id"): str,
+                vol.Optional("action", default=DEFAULT_OTA_ACTION): str,
+                vol.Optional("version"): str,
+                vol.Optional("url"): str,
                 vol.Optional("params"): dict,
             }
         ),

@@ -5,6 +5,7 @@ from typing import Any
 from homeassistant import config_entries
 from homeassistant.components.switch import SwitchEntity
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
@@ -63,17 +64,24 @@ class HeimanWifiSwitch(CoordinatorEntity[HeimanWifiCoordinator], SwitchEntity):
             return value.lower() in {"on", "true", "1"}
         return None
 
-    async def async_turn_on(self, **kwargs: Any) -> None:
-        await self.coordinator.device.async_set_state(
-            self.hass, self._prop.key, True, self._endpoint.id
+    async def _async_set_power(self, value: Any) -> None:
+        ok = await self.coordinator.device.async_set_state(
+            self.hass, self._prop.key, value, self._endpoint.id
         )
+        if not ok:
+            raise HomeAssistantError(
+                f"Failed to set {self._prop.key} on {self._endpoint.id}"
+            )
         await self.coordinator.async_request_refresh()
 
+    async def async_turn_on(self, **kwargs: Any) -> None:
+        await self._async_set_power(True)
+
     async def async_turn_off(self, **kwargs: Any) -> None:
-        await self.coordinator.device.async_set_state(
-            self.hass, self._prop.key, False, self._endpoint.id
-        )
-        await self.coordinator.async_request_refresh()
+        await self._async_set_power(False)
+
+    async def async_toggle(self, **kwargs: Any) -> None:
+        await self._async_set_power("toggle")
 
     @property
     def available(self) -> bool:

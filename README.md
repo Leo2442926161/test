@@ -108,6 +108,24 @@ data:
     code: "..."
 ```
 
+### `heiman_wifi.install_firmware`
+
+Starts a firmware OTA install without relying on `/info` OTA metadata. This is
+useful during development when you already have a firmware image available over
+HTTP.
+
+```yaml
+service: heiman_wifi.install_firmware
+data:
+  entry_id: 01J...
+  version: "1.0.2"
+  url: "http://192.168.1.10/firmware.bin"
+```
+
+For a direct/root device, `device_id` can be omitted. The default action is
+`ota_update`; set `action` if the firmware uses a different OTA action name.
+Extra values such as `md5`, `sha256`, or `size` can be passed under `params`.
+
 ## Firmware OTA
 
 The update entity reads the installed version from `firmwareVersion` or
@@ -120,6 +138,8 @@ metadata in `/info`:
   "ota": {
     "latest_version": "1.0.1",
     "url": "http://192.168.1.10/firmware.bin",
+    "sha256": "optional-image-sha256",
+    "size": 524288,
     "action": "ota_update",
     "release_summary": "Stability fixes"
   },
@@ -130,11 +150,38 @@ metadata in `/info`:
 When Install is pressed, HA calls `/control` with:
 
 ```json
-{"action": "ota_update", "params": {"version": "1.0.1", "url": "http://192.168.1.10/firmware.bin"}}
+{
+  "action": "ota_update",
+  "params": {
+    "version": "1.0.1",
+    "url": "http://192.168.1.10/firmware.bin",
+    "sha256": "optional-image-sha256",
+    "size": 524288
+  }
+}
 ```
 
-Progress can be reported from `/state` with `ota.in_progress` and
-`ota.progress`.
+The install action is only enabled when `/info` advertises OTA metadata or an
+OTA action. Root-device OTA actions are sent without `device_id`; child-device
+actions include `device_id`.
+
+The firmware should return a non-2xx HTTP status, or a JSON response such as
+`{"ok": false, "error": "reason"}`, when OTA cannot start. The integration
+treats that as a failed install and shows the device error in HA.
+
+Progress can be reported from `/state`:
+
+```json
+{
+  "ota": {
+    "in_progress": true,
+    "progress": 42
+  }
+}
+```
+
+When the device reboots into the new firmware and `/info.firmwareVersion`
+matches the target version, the integration clears local progress state.
 
 ## Installation
 

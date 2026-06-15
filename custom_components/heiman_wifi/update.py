@@ -36,6 +36,7 @@ OTA_ACTION_NAMES = (
     "ota",
 )
 OTA_INFO_KEYS = ("ota", "firmwareUpdate", "firmware_update", "firmware")
+OTA_ACTION_KEYS = ("action", "otaAction", "ota_action")
 CURRENT_VERSION_KEYS = (
     "firmwareVersion",
     "firmware_version",
@@ -67,6 +68,15 @@ OTA_URL_KEYS = (
     "download_url",
     "url",
 )
+OTA_MD5_KEYS = ("md5", "firmwareMd5", "firmware_md5", "checksum", "checksumMd5")
+OTA_SHA256_KEYS = (
+    "sha256",
+    "firmwareSha256",
+    "firmware_sha256",
+    "checksumSha256",
+    "checksum_sha256",
+)
+OTA_SIZE_KEYS = ("size", "firmwareSize", "firmware_size", "bytes")
 RELEASE_URL_KEYS = ("releaseUrl", "release_url", "changelogUrl", "changelog_url")
 RELEASE_SUMMARY_KEYS = (
     "releaseSummary",
@@ -97,9 +107,9 @@ IN_PROGRESS_KEYS = (
     "firmware_in_progress",
 )
 LOCAL_PROGRESS_TIMEOUT = 30 * 60
-OTA_FEATURES = (
+OTA_FEATURES = UpdateEntityFeature.PROGRESS
+OTA_INSTALL_FEATURES = (
     UpdateEntityFeature.INSTALL
-    | UpdateEntityFeature.PROGRESS
     | getattr(UpdateEntityFeature, "SPECIFIC_VERSION", UpdateEntityFeature(0))
 )
 
@@ -157,9 +167,15 @@ class HeimanWifiUpdate(CoordinatorEntity[HeimanWifiCoordinator], UpdateEntity):
         version = self._latest_version_from_data()
         if version:
             self._attr_latest_version = version
-        elif self.installed_version and not self._attr_latest_version:
+        else:
             self._attr_latest_version = self.installed_version
         return self._attr_latest_version
+
+    @property
+    def supported_features(self) -> UpdateEntityFeature:
+        if self._ota_supported():
+            return OTA_FEATURES | OTA_INSTALL_FEATURES
+        return OTA_FEATURES
 
     @property
     def release_url(self) -> str | None:
@@ -168,6 +184,19 @@ class HeimanWifiUpdate(CoordinatorEntity[HeimanWifiCoordinator], UpdateEntity):
     @property
     def release_summary(self) -> str | None:
         return self._find_ota_value(RELEASE_SUMMARY_KEYS)
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        attrs: dict[str, Any] = {
+            "ota_supported": self._ota_supported(),
+        }
+        if self._ota_supported():
+            attrs["ota_action"] = self._ota_action()
+        if ota_url := self._find_ota_value(OTA_URL_KEYS):
+            attrs["ota_url"] = ota_url
+        if self.coordinator.device.last_error:
+            attrs["last_error"] = self.coordinator.device.last_error
+        return attrs
 
     @property
     def in_progress(self) -> bool:
@@ -201,9 +230,16 @@ class HeimanWifiUpdate(CoordinatorEntity[HeimanWifiCoordinator], UpdateEntity):
         target_version = version or self.latest_version
         if not target_version:
             raise HomeAssistantError("No firmware version available for OTA update")
+        if not self._ota_supported():
+            actions = ", ".join(self._advertised_actions()) or "none"
+            raise HomeAssistantError(
+                f"{self.coordinator.device.host} does not advertise OTA support "
+                f"(/info actions: {actions})"
+            )
 
         action = self._ota_action()
         params = self._ota_params(target_version)
+        device_id = None if self._endpoint.is_root else self._endpoint.id
 
         _LOGGER.info(
             "Starting OTA update for %s from %s to %s using action %s",
@@ -222,7 +258,7 @@ class HeimanWifiUpdate(CoordinatorEntity[HeimanWifiCoordinator], UpdateEntity):
         ok = await self.coordinator.device.async_call_action(
             self.hass,
             action,
-            self._endpoint.id,
+            device_id,
             params,
         )
         if not ok:
@@ -231,9 +267,11 @@ class HeimanWifiUpdate(CoordinatorEntity[HeimanWifiCoordinator], UpdateEntity):
             self._local_progress_started_at = None
             self._attr_update_percentage = None
             self.async_write_ha_state()
-            raise HomeAssistantError(
-                f"Failed to start OTA update on {self.coordinator.device.host}"
-            )
+            detail = self.coordinator.device.last_error
+            message = f"Failed to start OTA update on {self.coordinator.device.host}"
+            if detail:
+                message = f"{message}: {detail}"
+            raise HomeAssistantError(message)
 
         self._attr_update_percentage = self._ota_progress_from_data() or 5
         self.async_write_ha_state()
@@ -267,34 +305,77 @@ class HeimanWifiUpdate(CoordinatorEntity[HeimanWifiCoordinator], UpdateEntity):
                 return str(value)
 
         state = self.coordinator.data.get("state", {})
-        return _first_string(state, LATEST_VERSION_KEYS[:-1])
+        for container in _state_info_dicts(state):
+            version = _first_string(container, LATEST_VERSION_KEYS)
+            if version and version != self.installed_version:
+                return version
+        return None
 
     def _find_ota_value(self, keys: tuple[str, ...]) -> str | None:
+        value = self._find_ota_raw_value(keys)
+        if value in (None, ""):
+            return None
+        return str(value)
+
+    def _find_ota_raw_value(self, keys: tuple[str, ...]) -> Any:
         info = self.coordinator.data.get("info", {})
-        value = _first_string(info, keys)
-        if value:
+        value = _first_value(info, keys)
+        if value not in (None, ""):
             return value
         for ota_info in _ota_info_dicts(info):
-            value = _first_string(ota_info, keys)
-            if value:
+            value = _first_value(ota_info, keys)
+            if value not in (None, ""):
                 return value
         return None
 
     def _ota_action(self) -> str:
-        action = self._find_ota_value(("action", "otaAction", "ota_action"))
+        action = self._find_ota_value(OTA_ACTION_KEYS)
         if action:
             return action
 
-        actions = self.coordinator.data.get("info", {}).get("actions", [])
-        for raw in actions if isinstance(actions, list) else []:
-            if isinstance(raw, str) and raw in OTA_ACTION_NAMES:
-                return raw
-            if isinstance(raw, dict):
-                candidate = raw.get("id") or raw.get("action") or raw.get("name")
-                if isinstance(candidate, str) and candidate in OTA_ACTION_NAMES:
-                    return candidate
+        advertised = self._advertised_ota_action()
+        if advertised:
+            return advertised
 
         return OTA_ACTION_NAMES[0]
+
+    def _ota_supported(self) -> bool:
+        return bool(
+            self._advertised_ota_action()
+            or self._find_ota_value(OTA_ACTION_KEYS)
+            or self._find_ota_value(OTA_URL_KEYS)
+            or self._ota_metadata_available()
+        )
+
+    def _ota_metadata_available(self) -> bool:
+        info = self.coordinator.data.get("info", {})
+        if _first_value(info, LATEST_VERSION_KEYS[:-1]):
+            return True
+        for ota_info in _ota_info_dicts(info):
+            if _first_value(
+                ota_info,
+                OTA_ACTION_KEYS + OTA_URL_KEYS + LATEST_VERSION_KEYS,
+            ):
+                return True
+        return False
+
+    def _advertised_ota_action(self) -> str | None:
+        for action in self._advertised_actions():
+            if action in OTA_ACTION_NAMES:
+                return action
+        return None
+
+    def _advertised_actions(self) -> list[str]:
+        actions = self.coordinator.data.get("info", {}).get("actions", [])
+        results: list[str] = []
+        for raw in actions if isinstance(actions, list) else []:
+            if isinstance(raw, str):
+                results.append(raw)
+            elif isinstance(raw, dict):
+                candidate = raw.get("id") or raw.get("action") or raw.get("name")
+                if isinstance(candidate, str):
+                    results.append(candidate)
+        return results
 
     def _ota_params(self, target_version: str) -> dict[str, Any]:
         params: dict[str, Any] = {}
@@ -306,6 +387,13 @@ class HeimanWifiUpdate(CoordinatorEntity[HeimanWifiCoordinator], UpdateEntity):
         params.setdefault("version", target_version)
         if ota_url := self._find_ota_value(OTA_URL_KEYS):
             params.setdefault("url", ota_url)
+        if md5 := self._find_ota_value(OTA_MD5_KEYS):
+            params.setdefault("md5", md5)
+        if sha256 := self._find_ota_value(OTA_SHA256_KEYS):
+            params.setdefault("sha256", sha256)
+        size = self._find_ota_raw_value(OTA_SIZE_KEYS)
+        if size not in (None, ""):
+            params.setdefault("size", size)
         return params
 
     def _ota_progress_from_data(self) -> int | float | None:
@@ -357,6 +445,8 @@ def _ota_info_dicts(info: dict[str, Any]) -> list[dict[str, Any]]:
         value = info.get(key)
         if isinstance(value, dict):
             results.append(value)
+        elif isinstance(value, list):
+            results.extend(item for item in value if isinstance(item, dict))
     return results
 
 

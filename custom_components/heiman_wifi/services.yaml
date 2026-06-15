@@ -45,3 +45,37 @@ call_action:
       required: false
       selector:
         object:
+
+install_firmware:
+  description: Start a firmware OTA install on a Heiman WiFi root device or gateway child device.
+  fields:
+    entry_id:
+      description: Home Assistant config entry id for the discovered device or gateway.
+      required: true
+      selector:
+        text:
+    device_id:
+      description: Heiman endpoint id. Leave empty for direct/root devices.
+      required: false
+      selector:
+        text:
+    action:
+      description: OTA action id to call on the device. Defaults to ota_update.
+      required: false
+      selector:
+        text:
+    version:
+      description: Target firmware version.
+      required: false
+      selector:
+        text:
+    url:
+      description: HTTP URL of the firmware image that the device should download.
+      required: false
+      selector:
+        text:
+    params:
+      description: Additional OTA parameters such as md5, sha256, size, or channel.
+      required: false
+      selector:
+        object:
