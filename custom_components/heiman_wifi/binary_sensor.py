@@ -24,6 +24,44 @@ from .model import (
 
 _LOGGER = logging.getLogger(__name__)
 
+ON_STRINGS = {
+    "1",
+    "active",
+    "alarm",
+    "connected",
+    "detected",
+    "flood",
+    "flooded",
+    "leak",
+    "leaking",
+    "on",
+    "open",
+    "online",
+    "trigger",
+    "triggered",
+    "true",
+    "wet",
+    "yes",
+}
+OFF_STRINGS = {
+    "0",
+    "clear",
+    "closed",
+    "dry",
+    "false",
+    "idle",
+    "inactive",
+    "no",
+    "no_alarm",
+    "normal",
+    "not_detected",
+    "off",
+    "offline",
+    "ok",
+}
+ON_MARKERS = ("alarm", "detected", "flood", "leak", "trigger", "wet")
+OFF_PREFIXES = ("no_", "not_", "normal_", "clear_")
+
 
 async def async_setup_entry(
     hass: HomeAssistant,
@@ -96,7 +134,14 @@ class HeimanWifiBinarySensor(
         if isinstance(value, (int, float)):
             return value != 0
         if isinstance(value, str):
-            return value.lower() in {"on", "open", "detected", "alarm", "true", "1"}
+            text = value.strip().lower().replace(" ", "_").replace("-", "_")
+            if text in ON_STRINGS:
+                return True
+            if text in OFF_STRINGS or text.startswith(OFF_PREFIXES):
+                return False
+            if any(marker in text for marker in ON_MARKERS):
+                return True
+            return False
         return None
 
     @property

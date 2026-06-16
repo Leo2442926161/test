@@ -239,7 +239,7 @@ class HeimanWifiUpdate(CoordinatorEntity[HeimanWifiCoordinator], UpdateEntity):
 
         action = self._ota_action()
         params = self._ota_params(target_version)
-        device_id = None if self._endpoint.is_root else self._endpoint.id
+        device_id = self._endpoint.control_id
 
         _LOGGER.info(
             "Starting OTA update for %s from %s to %s using action %s",

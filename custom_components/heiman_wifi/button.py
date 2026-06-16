@@ -3,6 +3,7 @@ from __future__ import annotations
 from homeassistant import config_entries
 from homeassistant.components.button import ButtonEntity
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
@@ -99,7 +100,13 @@ class HeimanWifiButton(CoordinatorEntity[HeimanWifiCoordinator], ButtonEntity):
         self._attr_device_info = endpoint_device_info(endpoint, entry)
 
     async def async_press(self) -> None:
-        await self.coordinator.device.async_call_action(
-            self.hass, self._action, self._endpoint.id
+        ok = await self.coordinator.device.async_call_action(
+            self.hass, self._action, self._endpoint.control_id
         )
+        if not ok:
+            detail = self.coordinator.device.last_error
+            message = f"Failed to call {self._action} on {self._endpoint.id}"
+            if detail:
+                message = f"{message}: {detail}"
+            raise HomeAssistantError(message)
         await self.coordinator.async_request_refresh()

@@ -203,6 +203,38 @@ HACS validation also checks GitHub repository metadata. Before running the HACS
 publish action, make sure the repository has a description and topics configured
 in the GitHub About panel.
 
+### HACS update prompts and release tags
+
+Home Assistant does not check `manifest.json` for custom integration updates by
+itself. The `version` field only tells Home Assistant and HACS which version is
+installed. Update prompts for the integration are handled by HACS, so the
+integration must be installed and tracked through HACS rather than copied
+manually into `custom_components`.
+
+Before publishing a new integration update:
+
+1. Update `custom_components/heiman_wifi/manifest.json` to the new version.
+2. Commit the release changes.
+3. Create and push a tag that matches the manifest version.
+4. Create a GitHub release from that tag.
+5. In HACS, use the repository menu action `Update information`, or wait for
+   the next HACS refresh.
+
+Example:
+
+```bash
+VERSION=1.2.5
+git add custom_components/heiman_wifi README.md
+git commit -m "Release v$VERSION"
+git tag -a "v$VERSION" -m "Heiman WiFi v$VERSION"
+git push origin main
+git push origin "v$VERSION"
+```
+
+Replace `main` with the release branch if needed. When testing update prompts,
+the version installed in Home Assistant must be lower than the version published
+on GitHub; otherwise HACS correctly treats the integration as already current.
+
 Suggested description:
 
 ```text

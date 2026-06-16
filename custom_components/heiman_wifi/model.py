@@ -70,6 +70,7 @@ class HeimanProperty:
 @dataclass(frozen=True)
 class HeimanEndpoint:
     id: str
+    control_id: str | None
     root_id: str
     name: str
     device_type: str
@@ -195,6 +196,13 @@ def _device_type_contains(device_type: str, hints: set[str]) -> bool:
     return any(hint in normalized for hint in hints)
 
 
+def _raw_device_id(raw: dict[str, Any], fallback: str) -> str:
+    value = raw.get("id") or raw.get("device_id") or raw.get("mac")
+    if value in (None, ""):
+        return fallback
+    return str(value)
+
+
 def _explicit_platform(raw: dict[str, Any]) -> str | None:
     value = raw.get("platform") or raw.get("entity") or raw.get("kind")
     if isinstance(value, str):
@@ -210,6 +218,26 @@ def _explicit_platform(raw: dict[str, Any]) -> str | None:
         }:
             return value
     return None
+
+
+def _looks_like_binary_key(key_lower: str) -> bool:
+    if key_lower in {pattern.lower() for pattern in BINARY_SENSOR_DEVICE_CLASS_MAP}:
+        return True
+    return any(
+        pattern.lower() in key_lower
+        for pattern in BINARY_SENSOR_DEVICE_CLASS_MAP
+        if len(pattern) > 2
+    )
+
+
+def _looks_like_sensor_key(key_lower: str) -> bool:
+    if key_lower in {"temp", "temperature", "hum", "humidity", "battery", "voltage"}:
+        return True
+    if key_lower.startswith(("temp_", "temperature_", "humidity_", "battery_")):
+        return True
+    if key_lower.endswith(("_temp", "_temperature", "_humidity", "_battery")):
+        return True
+    return any(pattern in key_lower for pattern in SENSOR_UNIT_MAP)
 
 
 def _infer_platform(
@@ -229,9 +257,14 @@ def _infer_platform(
         return "cover"
     if _device_type_contains(device_type, CLIMATE_TYPE_HINTS) and key_lower in CLIMATE_KEYS:
         return "climate"
+    if _looks_like_binary_key(key_lower):
+        if isinstance(value, (bool, int, float, str)) or value is None:
+            return "binary_sensor"
+    if _looks_like_sensor_key(key_lower):
+        return "sensor"
 
-    if key_lower in BINARY_SENSOR_DEVICE_CLASS_MAP or _device_type_contains(device_type, BINARY_TYPE_HINTS):
-        if isinstance(value, (bool, int, float)) or value is None:
+    if _device_type_contains(device_type, BINARY_TYPE_HINTS):
+        if isinstance(value, (bool, str)) or value is None:
             return "binary_sensor"
 
     writable = bool(raw.get("writable") or raw.get("writeable"))
@@ -263,6 +296,24 @@ def _property_config(
                 unit = unit or config.get("unit")
                 state_class = state_class or config.get("state_class")
                 break
+        if (
+            key_lower in {"temp", "temp_c", "temperature_c"}
+            or key_lower.startswith(("temp_", "temperature_"))
+            or key_lower.endswith(("_temp", "_temperature"))
+        ):
+            config = SENSOR_UNIT_MAP["temperature"]
+            device_class = device_class or config.get("device_class")
+            unit = unit or config.get("unit")
+            state_class = state_class or config.get("state_class")
+        elif (
+            key_lower in {"hum", "rel_humidity", "relative_humidity"}
+            or key_lower.startswith("humidity_")
+            or key_lower.endswith("_humidity")
+        ):
+            config = SENSOR_UNIT_MAP["humidity"]
+            device_class = device_class or config.get("device_class")
+            unit = unit or config.get("unit")
+            state_class = state_class or config.get("state_class")
     elif platform == "binary_sensor":
         for pattern, mapped in BINARY_SENSOR_DEVICE_CLASS_MAP.items():
             if pattern in key_lower:
@@ -341,9 +392,8 @@ def get_endpoints(coordinator_data: dict[str, Any], entry: ConfigEntry) -> list[
     endpoints: list[HeimanEndpoint] = []
     seen: set[str] = set()
     for raw in raw_devices:
-        endpoint_id = normalize_identifier(
-            raw.get("id") or raw.get("device_id") or raw.get("mac") or root_id
-        )
+        control_id = _raw_device_id(raw, root_id)
+        endpoint_id = normalize_identifier(control_id)
         if endpoint_id in seen:
             continue
         seen.add(endpoint_id)
@@ -353,6 +403,7 @@ def get_endpoints(coordinator_data: dict[str, Any], entry: ConfigEntry) -> list[
         endpoints.append(
             HeimanEndpoint(
                 id=endpoint_id,
+                control_id=None if endpoint_id == root_id else control_id,
                 root_id=root_id,
                 name=str(raw.get("name") or raw.get("deviceName") or endpoint_id),
                 device_type=device_type,
