@@ -169,28 +169,28 @@ class HeimanWifiLight(CoordinatorEntity[HeimanWifiCoordinator], LightEntity):
             self.hass,
             self._first_key(ON_KEYS, "power"),
             True,
-            self._endpoint.control_id,
+            self._endpoint.control_ids,
         )
         if ATTR_BRIGHTNESS in kwargs:
             await self.coordinator.device.async_set_state(
                 self.hass,
                 self._first_key(BRIGHTNESS_KEYS, "brightness"),
                 kwargs[ATTR_BRIGHTNESS],
-                self._endpoint.control_id,
+                self._endpoint.control_ids,
             )
         if ATTR_COLOR_TEMP_KELVIN in kwargs:
             await self.coordinator.device.async_set_state(
                 self.hass,
                 self._first_key(COLOR_TEMP_KEYS, "color_temp_kelvin"),
                 kwargs[ATTR_COLOR_TEMP_KELVIN],
-                self._endpoint.control_id,
+                self._endpoint.control_ids,
             )
         if ATTR_RGB_COLOR in kwargs:
             await self.coordinator.device.async_set_state(
                 self.hass,
                 self._first_key(RGB_KEYS, "rgb"),
                 list(kwargs[ATTR_RGB_COLOR]),
-                self._endpoint.control_id,
+                self._endpoint.control_ids,
             )
         await self.coordinator.async_request_refresh()
 
@@ -199,7 +199,7 @@ class HeimanWifiLight(CoordinatorEntity[HeimanWifiCoordinator], LightEntity):
             self.hass,
             self._first_key(ON_KEYS, "power"),
             False,
-            self._endpoint.control_id,
+            self._endpoint.control_ids,
         )
         await self.coordinator.async_request_refresh()
 

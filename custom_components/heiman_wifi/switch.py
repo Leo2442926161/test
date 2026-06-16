@@ -66,7 +66,7 @@ class HeimanWifiSwitch(CoordinatorEntity[HeimanWifiCoordinator], SwitchEntity):
 
     async def _async_set_power(self, value: Any) -> None:
         ok = await self.coordinator.device.async_set_state(
-            self.hass, self._prop.key, value, self._endpoint.control_id
+            self.hass, self._prop.key, value, self._endpoint.control_ids
         )
         if not ok:
             raise HomeAssistantError(

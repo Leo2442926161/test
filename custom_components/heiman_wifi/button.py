@@ -101,11 +101,12 @@ class HeimanWifiButton(CoordinatorEntity[HeimanWifiCoordinator], ButtonEntity):
 
     async def async_press(self) -> None:
         ok = await self.coordinator.device.async_call_action(
-            self.hass, self._action, self._endpoint.control_id
+            self.hass, self._action, self._endpoint.control_ids
         )
         if not ok:
             detail = self.coordinator.device.last_error
-            message = f"Failed to call {self._action} on {self._endpoint.id}"
+            targets = ", ".join(self._endpoint.control_ids) or self._endpoint.id
+            message = f"Failed to call {self._action} on {targets}"
             if detail:
                 message = f"{message}: {detail}"
             raise HomeAssistantError(message)

@@ -77,13 +77,13 @@ class HeimanWifiCover(CoordinatorEntity[HeimanWifiCoordinator], CoverEntity):
 
     async def async_open_cover(self, **kwargs: Any) -> None:
         await self.coordinator.device.async_set_state(
-            self.hass, "position", 100, self._endpoint.control_id
+            self.hass, "position", 100, self._endpoint.control_ids
         )
         await self.coordinator.async_request_refresh()
 
     async def async_close_cover(self, **kwargs: Any) -> None:
         await self.coordinator.device.async_set_state(
-            self.hass, "position", 0, self._endpoint.control_id
+            self.hass, "position", 0, self._endpoint.control_ids
         )
         await self.coordinator.async_request_refresh()
 
@@ -92,13 +92,13 @@ class HeimanWifiCover(CoordinatorEntity[HeimanWifiCoordinator], CoverEntity):
         if position is None:
             return
         await self.coordinator.device.async_set_state(
-            self.hass, "position", position, self._endpoint.control_id
+            self.hass, "position", position, self._endpoint.control_ids
         )
         await self.coordinator.async_request_refresh()
 
     async def async_stop_cover(self, **kwargs: Any) -> None:
         await self.coordinator.device.async_set_state(
-            self.hass, "stop", True, self._endpoint.control_id
+            self.hass, "stop", True, self._endpoint.control_ids
         )
         await self.coordinator.async_request_refresh()
 

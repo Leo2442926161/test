@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Sequence
 import json
 import logging
 from typing import Any
@@ -56,26 +57,50 @@ class HeimanWifiDevice:
         hass: HomeAssistant,
         property_id: str,
         value: Any,
-        device_id: str | None = None,
+        device_id: str | Sequence[str] | None = None,
     ) -> bool:
         payload: dict[str, Any] = {"property": property_id, "value": value}
-        if device_id:
-            payload["device_id"] = device_id
-        return await self._async_post_control(hass, payload, f"set {property_id}")
+        return await self._async_post_control_candidates(
+            hass, payload, device_id, f"set {property_id}"
+        )
 
     async def async_call_action(
         self,
         hass: HomeAssistant,
         action: str,
-        device_id: str | None = None,
+        device_id: str | Sequence[str] | None = None,
         params: dict[str, Any] | None = None,
     ) -> bool:
         payload: dict[str, Any] = {"action": action}
-        if device_id:
-            payload["device_id"] = device_id
         if params:
             payload["params"] = params
-        return await self._async_post_control(hass, payload, f"call action {action}")
+        return await self._async_post_control_candidates(
+            hass, payload, device_id, f"call action {action}"
+        )
+
+    async def _async_post_control_candidates(
+        self,
+        hass: HomeAssistant,
+        payload: dict[str, Any],
+        device_id: str | Sequence[str] | None,
+        operation: str,
+    ) -> bool:
+        candidates = _device_id_candidates(device_id)
+        for index, candidate in enumerate(candidates):
+            candidate_payload = dict(payload)
+            if candidate:
+                candidate_payload["device_id"] = candidate
+            ok = await self._async_post_control(hass, candidate_payload, operation)
+            if ok:
+                return True
+            if index == len(candidates) - 1 or not self._last_error_is_device_not_found():
+                return False
+            _LOGGER.debug(
+                "Retrying %s on %s with alternate device_id after device_not_found",
+                operation,
+                self.host,
+            )
+        return False
 
     async def _async_post_control(
         self,
@@ -164,6 +189,26 @@ class HeimanWifiDevice:
     async def close(self) -> None:
         if self._session and not self._session.closed:
             await self._session.close()
+
+    def _last_error_is_device_not_found(self) -> bool:
+        return "device_not_found" in (self.last_response or self.last_error or "")
+
+
+def _device_id_candidates(device_id: str | Sequence[str] | None) -> tuple[str | None, ...]:
+    if device_id is None or isinstance(device_id, str):
+        return (device_id,)
+
+    results: list[str | None] = []
+    seen: set[str] = set()
+    for value in device_id:
+        if value in (None, ""):
+            continue
+        text = str(value)
+        if text in seen:
+            continue
+        seen.add(text)
+        results.append(text)
+    return tuple(results) or (None,)
 
 
 def _json_body(body: str) -> Any:

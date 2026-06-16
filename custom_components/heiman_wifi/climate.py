@@ -88,7 +88,7 @@ class HeimanWifiClimate(CoordinatorEntity[HeimanWifiCoordinator], ClimateEntity)
 
     async def async_set_hvac_mode(self, hvac_mode: HVACMode) -> None:
         await self.coordinator.device.async_set_state(
-            self.hass, "heating", hvac_mode == HVACMode.HEAT, self._endpoint.control_id
+            self.hass, "heating", hvac_mode == HVACMode.HEAT, self._endpoint.control_ids
         )
         await self.coordinator.async_request_refresh()
 
@@ -97,7 +97,7 @@ class HeimanWifiClimate(CoordinatorEntity[HeimanWifiCoordinator], ClimateEntity)
         if temperature is None:
             return
         await self.coordinator.device.async_set_state(
-            self.hass, "target_temperature", temperature, self._endpoint.control_id
+            self.hass, "target_temperature", temperature, self._endpoint.control_ids
         )
         await self.coordinator.async_request_refresh()
 

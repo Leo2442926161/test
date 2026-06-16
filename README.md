@@ -63,11 +63,36 @@ The integration reads `devices[]` from `/info` and values from `/state`.
 Child devices are registered as HA devices with `via_device` pointing back to
 the gateway root device.
 
+For gateway child devices, the integration keeps the state/registry identity
+separate from the `device_id` sent to `/control`. When firmware exposes multiple
+child identifiers, command routing prefers explicit `control_id` or `device_id`
+values, then falls back through `id`, `mac`/`ieee`, and finally the child name.
+If a gateway returns `device_not_found`, the integration retries the next
+candidate. This matters for firmware that treats child ids as case-sensitive or
+uses a display-style id such as `HS2_Water_70AC08FF` for control.
+
+Water leak devices accept common alarm state strings such as `wet`, `leak`,
+`leaking`, `flood`, `triggered`, and `alarm` as active states. Strings such as
+`dry`, `clear`, `ok`, `normal`, and `no_alarm` are treated as inactive. Numeric
+alarm values still use `0` as clear and non-zero as active.
+
+Temperature properties named `temperature`, `temp`, `temp_*`, or
+`*_temperature` are mapped as temperature sensors even when they appear on a
+water leak or other binary-sensor style endpoint.
+
+If a gateway web page shows alarm, temperature, or humidity values but Home
+Assistant does not, check the gateway HTTP API rather than the web UI snapshot.
+Home Assistant polls `GET /state` every 30 seconds and creates entities from
+`GET /info`, so gateway firmware must expose zone-sensor descriptors in `/info`
+and the live values in `/state`. Values that exist only in a websocket or web
+dashboard snapshot will not update Home Assistant.
+
 ## Device Types Prepared
 
 | Device | Type examples | HA platforms |
 |---|---|---|
 | Gateway | `GW`, `gateway` | sensor, binary_sensor, switch, light, button, cover, climate, update |
+| Water leak sensor | `WA`, `water_sensor` | binary_sensor, sensor |
 | Color temperature light | `CT`, `CCT`, `color_temp_light` | light |
 | RGB light | `RGB`, `RGBCW`, `rgb_light` | light |
 | Door/window sensor | `DO`, `door_sensor`, `contact_sensor` | binary_sensor, sensor |
@@ -223,7 +248,7 @@ Before publishing a new integration update:
 Example:
 
 ```bash
-VERSION=1.2.5
+VERSION=1.2.6
 git add custom_components/heiman_wifi README.md
 git commit -m "Release v$VERSION"
 git tag -a "v$VERSION" -m "Heiman WiFi v$VERSION"

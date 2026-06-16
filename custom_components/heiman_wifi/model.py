@@ -71,6 +71,7 @@ class HeimanProperty:
 class HeimanEndpoint:
     id: str
     control_id: str | None
+    control_ids: tuple[str, ...]
     root_id: str
     name: str
     device_type: str
@@ -196,11 +197,51 @@ def _device_type_contains(device_type: str, hints: set[str]) -> bool:
     return any(hint in normalized for hint in hints)
 
 
-def _raw_device_id(raw: dict[str, Any], fallback: str) -> str:
-    value = raw.get("id") or raw.get("device_id") or raw.get("mac")
+def _endpoint_identity(raw: dict[str, Any], fallback: str) -> str:
+    value = (
+        raw.get("id")
+        or raw.get("mac")
+        or raw.get("ieee")
+        or raw.get("ieeeAddress")
+        or raw.get("ieee_address")
+        or raw.get("device_id")
+    )
     if value in (None, ""):
         return fallback
     return str(value)
+
+
+def _dedupe_strings(values: tuple[Any, ...]) -> tuple[str, ...]:
+    results: list[str] = []
+    seen: set[str] = set()
+    for value in values:
+        if value in (None, ""):
+            continue
+        text = str(value)
+        if text in seen:
+            continue
+        seen.add(text)
+        results.append(text)
+    return tuple(results)
+
+
+def _control_device_ids(raw: dict[str, Any], fallback: str) -> tuple[str, ...]:
+    return _dedupe_strings(
+        (
+            raw.get("control_id"),
+            raw.get("controlId"),
+            raw.get("device_id"),
+            raw.get("deviceId"),
+            raw.get("id"),
+            raw.get("mac"),
+            raw.get("ieee"),
+            raw.get("ieeeAddress"),
+            raw.get("ieee_address"),
+            raw.get("name"),
+            raw.get("deviceName"),
+            fallback,
+        )
+    )
 
 
 def _explicit_platform(raw: dict[str, Any]) -> str | None:
@@ -369,10 +410,7 @@ def get_endpoints(coordinator_data: dict[str, Any], entry: ConfigEntry) -> list[
     if isinstance(devices_from_info, list):
         raw_devices.extend(raw for raw in devices_from_info if isinstance(raw, dict))
 
-    raw_ids = {
-        normalize_identifier(raw.get("id") or raw.get("device_id") or raw.get("mac"))
-        for raw in raw_devices
-    }
+    raw_ids = {normalize_identifier(_endpoint_identity(raw, root_id)) for raw in raw_devices}
     if root_id not in raw_ids:
         raw_devices.insert(
             0,
@@ -392,8 +430,9 @@ def get_endpoints(coordinator_data: dict[str, Any], entry: ConfigEntry) -> list[
     endpoints: list[HeimanEndpoint] = []
     seen: set[str] = set()
     for raw in raw_devices:
-        control_id = _raw_device_id(raw, root_id)
-        endpoint_id = normalize_identifier(control_id)
+        endpoint_id = normalize_identifier(_endpoint_identity(raw, root_id))
+        control_ids = _control_device_ids(raw, endpoint_id)
+        control_id = control_ids[0]
         if endpoint_id in seen:
             continue
         seen.add(endpoint_id)
@@ -404,6 +443,7 @@ def get_endpoints(coordinator_data: dict[str, Any], entry: ConfigEntry) -> list[
             HeimanEndpoint(
                 id=endpoint_id,
                 control_id=None if endpoint_id == root_id else control_id,
+                control_ids=() if endpoint_id == root_id else control_ids,
                 root_id=root_id,
                 name=str(raw.get("name") or raw.get("deviceName") or endpoint_id),
                 device_type=device_type,
