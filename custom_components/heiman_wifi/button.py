@@ -23,14 +23,22 @@ async def async_setup_entry(
     async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
     coordinator: HeimanWifiCoordinator = hass.data[DOMAIN][entry.entry_id]
-    info = coordinator.data.get("info", {})
-    endpoints = get_endpoints(coordinator.data, entry)
-    root_endpoint = next((endpoint for endpoint in endpoints if endpoint.is_root), None)
+    known_unique_ids: set[str] = set()
 
-    buttons: list[HeimanWifiButton] = []
-    if root_endpoint:
-        for action in info.get("actions", []):
-            if isinstance(action, str):
+    def add_new_entities() -> None:
+        info = coordinator.data.get("info", {})
+        endpoints = get_endpoints(coordinator.data, entry)
+        root_endpoint = next((endpoint for endpoint in endpoints if endpoint.is_root), None)
+
+        buttons: list[HeimanWifiButton] = []
+        if root_endpoint:
+            for action in info.get("actions", []):
+                if not isinstance(action, str):
+                    continue
+                unique_id = HeimanWifiButton.make_unique_id(entry, root_endpoint, action)
+                if unique_id in known_unique_ids:
+                    continue
+                known_unique_ids.add(unique_id)
                 buttons.append(
                     HeimanWifiButton(
                         coordinator=coordinator,
@@ -41,23 +49,39 @@ async def async_setup_entry(
                     )
                 )
 
-    for endpoint, prop in iter_properties(coordinator.data, entry, "button"):
-        buttons.append(
-            HeimanWifiButton(
-                coordinator=coordinator,
-                entry=entry,
-                endpoint=endpoint,
-                action=prop.key,
-                name=prop.name,
+        for endpoint, prop in iter_properties(coordinator.data, entry, "button"):
+            unique_id = HeimanWifiButton.make_unique_id(entry, endpoint, prop.key)
+            if unique_id in known_unique_ids:
+                continue
+            known_unique_ids.add(unique_id)
+            buttons.append(
+                HeimanWifiButton(
+                    coordinator=coordinator,
+                    entry=entry,
+                    endpoint=endpoint,
+                    action=prop.key,
+                    name=prop.name,
+                )
             )
-        )
 
-    if buttons:
-        async_add_entities(buttons)
+        if buttons:
+            async_add_entities(buttons)
+
+    add_new_entities()
+    entry.async_on_unload(coordinator.async_add_listener(add_new_entities))
 
 
 class HeimanWifiButton(CoordinatorEntity[HeimanWifiCoordinator], ButtonEntity):
     _attr_has_entity_name = True
+
+    @staticmethod
+    def make_unique_id(
+        entry: config_entries.ConfigEntry,
+        endpoint: HeimanEndpoint,
+        action: str,
+    ) -> str:
+        root = normalize_identifier(entry.unique_id or entry.entry_id)
+        return f"{root}_{endpoint.id}_{action}_button"
 
     def __init__(
         self,
@@ -70,8 +94,7 @@ class HeimanWifiButton(CoordinatorEntity[HeimanWifiCoordinator], ButtonEntity):
         super().__init__(coordinator)
         self._endpoint = endpoint
         self._action = action
-        root = normalize_identifier(entry.unique_id or entry.entry_id)
-        self._attr_unique_id = f"{root}_{endpoint.id}_{action}_button"
+        self._attr_unique_id = self.make_unique_id(entry, endpoint, action)
         self._attr_name = name
         self._attr_device_info = endpoint_device_info(endpoint, entry)
 
