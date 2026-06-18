@@ -18,6 +18,7 @@ from .coordinator import HeimanWifiCoordinator
 from .model import (
     HeimanEndpoint,
     climate_endpoints,
+    endpoint_available,
     endpoint_device_info,
     get_property_value,
     normalize_identifier,
@@ -103,4 +104,8 @@ class HeimanWifiClimate(CoordinatorEntity[HeimanWifiCoordinator], ClimateEntity)
 
     @property
     def available(self) -> bool:
-        return self.coordinator.last_update_success
+        return endpoint_available(
+            self.coordinator.data,
+            self._endpoint.id,
+            self.coordinator.last_update_success,
+        )

@@ -7,6 +7,7 @@ from homeassistant.components.binary_sensor import (
     BinarySensorDeviceClass,
     BinarySensorEntity,
 )
+from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
@@ -16,6 +17,7 @@ from .coordinator import HeimanWifiCoordinator
 from .model import (
     HeimanEndpoint,
     HeimanProperty,
+    endpoint_available,
     endpoint_device_info,
     get_property_value,
     iter_properties,
@@ -74,6 +76,8 @@ async def async_setup_entry(
     def add_new_entities() -> None:
         entities: list[HeimanWifiBinarySensor] = []
         for endpoint, prop in iter_properties(coordinator.data, entry, "binary_sensor"):
+            if endpoint.is_root and prop.key == "zigbee_joining":
+                continue
             unique_id = HeimanWifiBinarySensor.make_unique_id(entry, endpoint, prop)
             if unique_id in known_unique_ids:
                 continue
@@ -120,6 +124,8 @@ class HeimanWifiBinarySensor(
         self._attr_unique_id = self.make_unique_id(entry, endpoint, prop)
         self._attr_name = prop.name
         self._attr_device_info = endpoint_device_info(endpoint, entry)
+        if prop.diagnostic:
+            self._attr_entity_category = EntityCategory.DIAGNOSTIC
         if prop.device_class:
             try:
                 self._attr_device_class = BinarySensorDeviceClass(prop.device_class)
@@ -146,4 +152,8 @@ class HeimanWifiBinarySensor(
 
     @property
     def available(self) -> bool:
-        return self.coordinator.last_update_success
+        return endpoint_available(
+            self.coordinator.data,
+            self._endpoint.id,
+            self.coordinator.last_update_success,
+        )

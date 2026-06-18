@@ -8,7 +8,6 @@ from typing import Any
 import aiohttp
 
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -25,30 +24,82 @@ class HeimanWifiDevice:
         self.last_error: str | None = None
         self.last_response: str | None = None
 
+    def update_connection(self, host: str, port: int = 80) -> bool:
+        if self.host == host and self.port == port:
+            return False
+
+        self.host = host
+        self.port = port
+        self._base_url = f"http://{host}:{port}"
+        self.last_error = None
+        self.last_response = None
+        return True
+
     async def _get_session(self) -> aiohttp.ClientSession:
         if self._session is None or self._session.closed:
-            self._session = aiohttp.ClientSession()
+            # These are LAN devices. Bypass environment HTTP proxies so polling
+            # cannot be routed through a proxy that cannot reach .local hosts.
+            self._session = aiohttp.ClientSession(trust_env=False)
         return self._session
 
     async def async_get_info(self, hass: HomeAssistant | None = None) -> dict[str, Any]:
-        session = await self._get_session() if hass is None else async_get_clientsession(hass)
+        _ = hass
+        self.last_error = None
+        self.last_response = None
+        session = await self._get_session()
         try:
             async with session.get(f"{self._base_url}/info", timeout=10) as resp:
+                body = await resp.text()
+                self.last_response = body
                 if resp.status == 200:
-                    data = await resp.json()
+                    data = _json_body(body)
+                    if not isinstance(data, dict):
+                        self.last_error = f"Invalid JSON from /info: {body[:200]}"
+                        _LOGGER.warning(
+                            "Invalid /info JSON from %s: %s", self.host, body[:200]
+                        )
+                        return {}
                     self._info = data
                     return data
+                self.last_error = f"HTTP {resp.status}: {body}"
+                _LOGGER.warning(
+                    "Failed to get info from %s with HTTP %s: %s",
+                    self.host,
+                    resp.status,
+                    body[:200],
+                )
         except (aiohttp.ClientError, TimeoutError) as err:
+            self.last_error = str(err)
             _LOGGER.debug("Failed to get info from %s: %s", self.host, err)
         return {}
 
     async def async_get_state(self, hass: HomeAssistant) -> dict[str, Any]:
-        session = async_get_clientsession(hass)
+        _ = hass
+        self.last_error = None
+        self.last_response = None
+        session = await self._get_session()
         try:
             async with session.get(f"{self._base_url}/state", timeout=10) as resp:
+                body = await resp.text()
+                self.last_response = body
                 if resp.status == 200:
-                    return await resp.json()
+                    data = _json_body(body)
+                    if isinstance(data, dict):
+                        return data
+                    self.last_error = f"Invalid JSON from /state: {body[:200]}"
+                    _LOGGER.warning(
+                        "Invalid /state JSON from %s: %s", self.host, body[:200]
+                    )
+                    return {}
+                self.last_error = f"HTTP {resp.status}: {body}"
+                _LOGGER.warning(
+                    "Failed to get state from %s with HTTP %s: %s",
+                    self.host,
+                    resp.status,
+                    body[:200],
+                )
         except (aiohttp.ClientError, TimeoutError) as err:
+            self.last_error = str(err)
             _LOGGER.debug("Failed to get state from %s: %s", self.host, err)
         return {}
 
@@ -76,6 +127,14 @@ class HeimanWifiDevice:
             payload["params"] = params
         return await self._async_post_control_candidates(
             hass, payload, device_id, f"call action {action}"
+        )
+
+    async def async_ws_connect(self) -> aiohttp.ClientWebSocketResponse:
+        session = await self._get_session()
+        return await session.ws_connect(
+            f"ws://{self.host}:{self.port}/ws",
+            heartbeat=30,
+            timeout=10,
         )
 
     async def _async_post_control_candidates(
@@ -108,7 +167,8 @@ class HeimanWifiDevice:
         payload: dict[str, Any],
         operation: str,
     ) -> bool:
-        session = async_get_clientsession(hass)
+        _ = hass
+        session = await self._get_session()
         self.last_error = None
         self.last_response = None
         try:

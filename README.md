@@ -63,6 +63,19 @@ The integration reads `devices[]` from `/info` and values from `/state`.
 Child devices are registered as HA devices with `via_device` pointing back to
 the gateway root device.
 
+Gateway child availability is driven by the child item's top-level `online`
+field in `GET /state`. The integration does not create an `Online` entity for
+each child; it uses that value to mark existing child entities as available or
+unavailable in the native Home Assistant way.
+
+Home Assistant does not expose child-device delete/remove buttons. Network
+removal should be initiated by the gateway firmware, gateway maintenance UI, or
+the physical device leave flow. When the gateway reports a child leave/remove
+event over `/ws` as `device_removed`, the integration matches it by child id,
+`index`, or `shortAddr` and marks the matching child endpoint offline. HA may
+keep old entity registry entries after a real delete; remove stale entities from
+the HA device page if they are no longer needed.
+
 For gateway child devices, the integration keeps the state/registry identity
 separate from the `device_id` sent to `/control`. When firmware exposes multiple
 child identifiers, command routing prefers explicit `control_id` or `device_id`
@@ -80,12 +93,20 @@ Temperature properties named `temperature`, `temp`, `temp_*`, or
 `*_temperature` are mapped as temperature sensors even when they appear on a
 water leak or other binary-sensor style endpoint.
 
-If a gateway web page shows alarm, temperature, or humidity values but Home
-Assistant does not, check the gateway HTTP API rather than the web UI snapshot.
-Home Assistant polls `GET /state` every 30 seconds and creates entities from
-`GET /info`, so gateway firmware must expose zone-sensor descriptors in `/info`
-and the live values in `/state`. Values that exist only in a websocket or web
-dashboard snapshot will not update Home Assistant.
+If a gateway web page shows alarm or temperature values but Home Assistant does
+not, check the gateway HA API shape rather than only the dashboard snapshot.
+Home Assistant creates entities from `GET /info`, polls `GET /state` every 30
+seconds, and for WS6GW also listens to `/ws` event messages when available.
+Fast child-device updates should include `ha_state` in websocket
+`device_update` messages so HA can update without waiting for the next poll.
+Values that exist only in the dashboard-only `device.state` object are not
+enough for HA entities.
+
+The integration opens LAN HTTP connections with proxy environment variables
+disabled. If `curl http://<gateway>.local/state` returns a proxy error such as
+HTTP 503, retry with `curl --noproxy '*' http://<gateway>.local/state`; Home
+Assistant should see the same direct response after the integration is updated
+and restarted.
 
 ## Device Types Prepared
 
@@ -248,7 +269,7 @@ Before publishing a new integration update:
 Example:
 
 ```bash
-VERSION=1.2.6
+VERSION=1.2.7
 git add custom_components/heiman_wifi README.md
 git commit -m "Release v$VERSION"
 git tag -a "v$VERSION" -m "Heiman WiFi v$VERSION"
@@ -296,7 +317,9 @@ iot
 | `custom_components/heiman_wifi/services.yaml` | Private property/action service definitions |
 
 See [docs/protocol-and-gateway-notes.md](docs/protocol-and-gateway-notes.md)
-for the firmware-facing protocol examples.
+for the firmware-facing protocol examples. See
+[docs/ws6gw-ha-change-notes.md](docs/ws6gw-ha-change-notes.md) for the WS6GW
+gateway capability mapping, water-leak notes, and recent change log.
 
 ## ESP Demo
 

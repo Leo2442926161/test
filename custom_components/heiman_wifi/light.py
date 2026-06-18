@@ -18,6 +18,7 @@ from .const import DOMAIN
 from .coordinator import HeimanWifiCoordinator
 from .model import (
     HeimanEndpoint,
+    endpoint_available,
     endpoint_device_info,
     get_property_value,
     light_endpoints,
@@ -205,4 +206,8 @@ class HeimanWifiLight(CoordinatorEntity[HeimanWifiCoordinator], LightEntity):
 
     @property
     def available(self) -> bool:
-        return self.coordinator.last_update_success
+        return endpoint_available(
+            self.coordinator.data,
+            self._endpoint.id,
+            self.coordinator.last_update_success,
+        )

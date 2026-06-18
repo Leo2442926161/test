@@ -11,11 +11,14 @@ from .const import DOMAIN
 from .coordinator import HeimanWifiCoordinator
 from .model import (
     HeimanEndpoint,
+    endpoint_available,
     endpoint_device_info,
     get_endpoints,
     iter_properties,
     normalize_identifier,
 )
+
+HIDDEN_ACTIONS = {"delete", "delete_device", "permit_join", "refresh"}
 
 
 async def async_setup_entry(
@@ -36,6 +39,8 @@ async def async_setup_entry(
             for action in info.get("actions", []):
                 if not isinstance(action, str):
                     continue
+                if action in HIDDEN_ACTIONS:
+                    continue
                 unique_id = HeimanWifiButton.make_unique_id(entry, root_endpoint, action)
                 if unique_id in known_unique_ids:
                     continue
@@ -51,6 +56,8 @@ async def async_setup_entry(
                 )
 
         for endpoint, prop in iter_properties(coordinator.data, entry, "button"):
+            if prop.key in HIDDEN_ACTIONS:
+                continue
             unique_id = HeimanWifiButton.make_unique_id(entry, endpoint, prop.key)
             if unique_id in known_unique_ids:
                 continue
@@ -111,3 +118,11 @@ class HeimanWifiButton(CoordinatorEntity[HeimanWifiCoordinator], ButtonEntity):
                 message = f"{message}: {detail}"
             raise HomeAssistantError(message)
         await self.coordinator.async_request_refresh()
+
+    @property
+    def available(self) -> bool:
+        return endpoint_available(
+            self.coordinator.data,
+            self._endpoint.id,
+            self.coordinator.last_update_success,
+        )

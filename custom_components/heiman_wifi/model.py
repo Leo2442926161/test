@@ -17,7 +17,7 @@ from .const import (
 )
 from .helpers import info_value, normalize_identifier, normalize_mac
 
-ROOT_STATE_KEYS = {"devices", "online", "ip", "wifi", "mqtt"}
+ROOT_STATE_KEYS = {"devices", "online", "ip", "wifi", "mqtt", "schema", "tsMs"}
 SCALAR_TYPES = (str, int, float, bool)
 
 SWITCH_KEYS = {"power", "switch", "relay", "outlet", "plug", "state", "on"}
@@ -48,9 +48,11 @@ BINARY_TYPE_HINTS = {
     "gas_sensor",
     "water_sensor",
     "motion_sensor",
+    "vibration_sensor",
     "door_sensor",
     "contact_sensor",
 }
+HIDDEN_ENTITY_KEYS = {"online", "dev_type", "endpoint_count", "zone_status"}
 
 
 @dataclass(frozen=True)
@@ -152,6 +154,74 @@ def get_property_value(
     return current
 
 
+def endpoint_available(
+    coordinator_data: dict[str, Any],
+    endpoint_id: str,
+    coordinator_available: bool,
+) -> bool:
+    if not coordinator_available:
+        return False
+
+    root_id = root_device_id_from_data(coordinator_data)
+    normalized_endpoint_id = normalize_identifier(endpoint_id)
+    if normalized_endpoint_id == root_id:
+        return True
+
+    online = endpoint_online(coordinator_data, normalized_endpoint_id)
+    if online is None:
+        return True
+    return online
+
+
+def endpoint_online(coordinator_data: dict[str, Any], endpoint_id: str) -> bool | None:
+    state = coordinator_data.get("state", {})
+    if not isinstance(state, dict):
+        return None
+
+    normalized_endpoint_id = normalize_identifier(endpoint_id)
+    raw_devices = state.get("devices")
+    if isinstance(raw_devices, list):
+        for raw in raw_devices:
+            if not isinstance(raw, dict):
+                continue
+            raw_id = normalize_identifier(
+                raw.get("id") or raw.get("device_id") or raw.get("mac")
+            )
+            if raw_id != normalized_endpoint_id:
+                continue
+            return _online_value(raw)
+    elif isinstance(raw_devices, dict):
+        for raw_id, raw in raw_devices.items():
+            if normalize_identifier(raw_id) != normalized_endpoint_id:
+                continue
+            if isinstance(raw, dict):
+                return _online_value(raw)
+    return None
+
+
+def _online_value(raw: dict[str, Any]) -> bool | None:
+    value = raw.get("online")
+    if value is None:
+        props = raw.get("properties")
+        if isinstance(props, dict):
+            value = props.get("online")
+    return _coerce_bool(value)
+
+
+def _coerce_bool(value: Any) -> bool | None:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return value != 0
+    if isinstance(value, str):
+        text = value.strip().lower()
+        if text in {"1", "active", "connected", "on", "online", "true", "yes"}:
+            return True
+        if text in {"0", "disconnected", "false", "no", "off", "offline"}:
+            return False
+    return None
+
+
 def root_device_id_from_data(coordinator_data: dict[str, Any]) -> str:
     info = coordinator_data.get("info", {})
     mac = normalize_mac(info_value(info, "mac", "macAddress"))
@@ -233,10 +303,15 @@ def _control_device_ids(raw: dict[str, Any], fallback: str) -> tuple[str, ...]:
             raw.get("device_id"),
             raw.get("deviceId"),
             raw.get("id"),
+            raw.get("legacyDeviceId"),
+            raw.get("legacy_device_id"),
             raw.get("mac"),
             raw.get("ieee"),
             raw.get("ieeeAddress"),
             raw.get("ieee_address"),
+            raw.get("index"),
+            raw.get("shortAddr"),
+            raw.get("short_addr"),
             raw.get("name"),
             raw.get("deviceName"),
             fallback,
@@ -287,11 +362,14 @@ def _infer_platform(
     value: Any,
     device_type: str,
 ) -> str | None:
+    key_lower = key.lower()
+    if key_lower == "zigbee_join_detected":
+        return "sensor"
+
     explicit = _explicit_platform(raw)
     if explicit:
         return explicit
 
-    key_lower = key.lower()
     if _device_type_contains(device_type, LIGHT_TYPE_HINTS) and key_lower in LIGHT_KEYS:
         return "light"
     if _device_type_contains(device_type, COVER_TYPE_HINTS) and key_lower in COVER_KEYS:
@@ -329,6 +407,11 @@ def _property_config(
     unit = raw.get("unit") or raw.get("unit_of_measurement")
     state_class = raw.get("state_class") or raw.get("stateClass")
     diagnostic = bool(raw.get("diagnostic") or raw.get("entity_category") == "diagnostic")
+
+    if key_lower == "zigbee_join_detected":
+        device_class = None
+        state_class = None
+        diagnostic = True
 
     if platform == "sensor":
         for pattern, config in SENSOR_UNIT_MAP.items():
@@ -375,6 +458,9 @@ def _build_properties(
 
     props: list[HeimanProperty] = []
     for key, raw in descriptors.items():
+        key_lower = key.lower()
+        if key_lower in HIDDEN_ENTITY_KEYS:
+            continue
         value = state_props.get(key)
         platform = _infer_platform(key, raw, value, device_type)
         if not platform or platform in {"light", "cover", "climate"}:

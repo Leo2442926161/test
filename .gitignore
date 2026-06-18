@@ -18,7 +18,8 @@ ENV/
 .env.*
 !.env.example
 
-docs/
+docs/*
+!docs/ws6gw-ha-change-notes.md
 
 
 # Build, packaging, and coverage output
